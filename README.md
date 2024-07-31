@@ -1,15 +1,27 @@
+<div align="center">
+  <img src="https://github.com/AndersondaCampo/AndersondaCampo/blob/Master/header.jpg" width="1000px" alt="Header Image">
+</div>
+
 <h1 align="center">
   Nest4D
 </h1>
 
 <p align="center">
   <a href="https://github.com/AndersondaCampo/Nest4D/blob/Master/img/nest4d.png">
-    <img alt="Horse" height="300" src="https://github.com/AndersondaCampo/Nest4D/blob/Master/img/nest4d.png">
-  </a>  
-</p><br>
+    <img alt="Nest4D" height="300" src="https://github.com/AndersondaCampo/Nest4D/blob/Master/img/nest4d.png">
+  </a>
+</p>
 
-<p align="start">
+<p align="center">
   Um framework inspirado no NestJS para Delphi com o poderoso Horse!
+</p>
+
+<br>
+
+<p align="center">
+  <h2>Este repositório está aberto para contribuições!</h2> 
+  Sinta-se encorajado a abrir issues, enviar pull requests ou compartilhar ideias para melhorar este projeto. 
+  Toda ajuda é bem-vinda!
 </p>
 
 <h2>
