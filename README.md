@@ -1,7 +1,3 @@
-<div align="center">
-  <img src="https://github.com/AndersondaCampo/AndersondaCampo/blob/Master/header.jpg" width="1000px" alt="Header Image">
-</div>
-
 <h1 align="center">
   Nest4D
 </h1>
