@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/andeerc/Nest4D/blob/Master/img/nest4d.png">
-    <img alt="Nest4D" height="300" src="https://github.com/AndersondaCampo/Nest4D/blob/Master/img/nest4d.png">
+    <img alt="Nest4D" height="300" src="https://github.com/andeerc/Nest4D/blob/Master/img/nest4d.png">
   </a>
 </p>
 
