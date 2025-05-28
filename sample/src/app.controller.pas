@@ -5,7 +5,6 @@ interface
 uses
   System.Json,
   System.Generics.Collections,
-  System.TypInfo,
   Nest4D.Attributes,
   Nest4D.Logger,
   app.service;
@@ -79,6 +78,8 @@ type
 implementation
 
 uses
+  Rtti,
+  System.TypInfo,
   System.SysUtils;
 
 { TAppController }

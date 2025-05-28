@@ -20,7 +20,7 @@ implementation
 uses
   app.controller,
   app.service,
-  Nest4D.Injector;
+  users.module;
 
 { TAppModule }
 
@@ -31,7 +31,7 @@ end;
 
 function TAppModule.Imports: TArray<TClass>;
 begin
-  Result := [];
+  Result := [TUsersModule];
 end;
 
 function TAppModule.Services: TArray<TClass>;

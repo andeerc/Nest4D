@@ -6,6 +6,7 @@ program Nest4DSample;
 uses
   System.SysUtils,
   Rtti,
+  Horse,
   Nest4D.Application in '..\src\Nest4D.Application.pas',
   Nest4D.Attributes in '..\src\Nest4D.Attributes.pas',
   Nest4D.Interfaces in '..\src\Nest4D.Interfaces.pas',
@@ -19,7 +20,10 @@ uses
   Nest4D.Injector.events in '..\src\Nest4D.Injector.events.pas',
   Nest4D.Injector.factory in '..\src\Nest4D.Injector.factory.pas',
   Nest4D.Injector.service.abstract in '..\src\Nest4D.Injector.service.abstract.pas',
-  Nest4D.Injector.service in '..\src\Nest4D.Injector.service.pas';
+  Nest4D.Injector.service in '..\src\Nest4D.Injector.service.pas',
+  users.module in 'src\users\users.module.pas',
+  users.controller in 'src\users\users.controller.pas',
+  users.service in 'src\users\users.service.pas';
 
 var
   loggerConfig: TLoggerConfig;
@@ -28,7 +32,7 @@ begin
     // Configuração avançada do logger
     loggerConfig                  := TLoggerConfig.Default;
     loggerConfig.MinLevel         := llDebug;          // Mostra todos os logs em desenvolvimento
-    loggerConfig.Destination      := ldBoth;           // Saída no console E arquivo
+    loggerConfig.Destination      := ldConsole;           // Saída no console E arquivo
     loggerConfig.LogFileName      := 'nest4d_app.log'; // Nome do arquivo de log
     loggerConfig.MaxFileSize      := 5 * 1024 * 1024;  // 5MB - rotação automática
     loggerConfig.IncludeTimestamp := True;

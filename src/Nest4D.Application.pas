@@ -57,7 +57,9 @@ type
     function BuildRouteKey(const AHTTPMethod, APath: String): String;
     function NormalizePath(const APath: String): String;
     function FindRouteMatch(const ARequestedPath: String): String;
-    procedure LogRouteRegistration(const AHTTPMethod, APath, AControllerName: String);
+    function FindRouteMatchWithMethod(const ARequestedPath: String; const AHTTPMethod: String): String;
+    procedure LogRouteRegistration(const AHTTPMethod, APath, AControllerName, AMethodName: string);
+    procedure DebugRoutes; // Debug helper to list all registered routes
 
     constructor Create(AAppModule: TClass; ACallback: TProc<TNest4DApplication>);
   public
@@ -121,6 +123,9 @@ begin
     try
       FLogger.Info('Starting Nest4D application initialization...');
       RegisterModule(FAppModule);
+
+      // Debug: list all registered routes
+      DebugRoutes;
     finally
       FLogger.Info(Format('Total load time: %d ms', [moduleStopwatch.ElapsedMilliseconds]));
     end;
@@ -196,8 +201,10 @@ begin
         end;
 
         // Register imported modules
+        FLogger.Debug('Processing imports for module: ' + AType.Name);
         for service in module.Imports do
         begin
+          FLogger.Debug('Registering imported module: ' + service.ClassName);
           RegisterModule(service);
         end;
       end
@@ -334,6 +341,8 @@ begin
   fullPath := NormalizePath(AControllerPath + ARoutePath);
   routeKey := BuildRouteKey(AHTTPMethod, fullPath);
 
+  FLogger.Debug(Format('Registering route: %s %s (Key: %s)', [AHTTPMethod, fullPath, routeKey]));
+
   methodInfo.ControllerType  := AControllerType;
   methodInfo.ControllerClass := AControllerClass;
   methodInfo.MethodName      := AMethodName;
@@ -341,44 +350,82 @@ begin
   methodInfo.HTTPMethod      := AHTTPMethod;
 
   FMethodsDictionary.Add(routeKey, methodInfo);
+  FLogger.Debug(Format('Route added to dictionary. Total routes: %d', [FMethodsDictionary.Count]));
 
   // Register with Horse
-  if AHTTPMethod = 'GET' then
-    THorse.Get(fullPath,
-      procedure(req: THorseRequest; res: THorseResponse)
-      begin
-        ProcessRequest(req, res, mtGet);
-      end)
-  else
-    if AHTTPMethod = 'POST' then
-      THorse.Post(fullPath,
+  try
+    if AHTTPMethod = 'GET' then
+    begin
+      FLogger.Debug('Registering GET route with Horse: ' + fullPath);
+      THorse.Get(fullPath,
         procedure(req: THorseRequest; res: THorseResponse)
         begin
-          ProcessRequest(req, res, mtPost);
-        end)
+          FLogger.Debug('Horse GET handler called for: ' + req.RawWebRequest.PathInfo);
+          ProcessRequest(req, res, mtGet);
+        end);
+      FLogger.Debug('GET route successfully registered with Horse');
+    end
     else
-      if AHTTPMethod = 'PUT' then
-        THorse.Put(fullPath,
+      if AHTTPMethod = 'POST' then
+      begin
+        FLogger.Debug('Registering POST route with Horse: ' + fullPath);
+        THorse.Post(fullPath,
           procedure(req: THorseRequest; res: THorseResponse)
           begin
-            ProcessRequest(req, res, mtPut);
-          end)
+            FLogger.Debug('Horse POST handler called for: ' + req.RawWebRequest.PathInfo);
+            ProcessRequest(req, res, mtPost);
+          end);
+        FLogger.Debug('POST route successfully registered with Horse');
+      end
       else
-        if AHTTPMethod = 'PATCH' then
-          THorse.Patch(fullPath,
+        if AHTTPMethod = 'PUT' then
+        begin
+          FLogger.Debug('Registering PUT route with Horse: ' + fullPath);
+          THorse.Put(fullPath,
             procedure(req: THorseRequest; res: THorseResponse)
             begin
-              ProcessRequest(req, res, mtPatch);
-            end)
+              FLogger.Debug('Horse PUT handler called for: ' + req.RawWebRequest.PathInfo);
+              ProcessRequest(req, res, mtPut);
+            end);
+          FLogger.Debug('PUT route successfully registered with Horse');
+        end
         else
-          if AHTTPMethod = 'DELETE' then
-            THorse.Delete(fullPath,
+          if AHTTPMethod = 'PATCH' then
+          begin
+            FLogger.Debug('Registering PATCH route with Horse: ' + fullPath);
+            THorse.Patch(fullPath,
               procedure(req: THorseRequest; res: THorseResponse)
               begin
-                ProcessRequest(req, res, mtDelete);
+                FLogger.Debug('Horse PATCH handler called for: ' + req.RawWebRequest.PathInfo);
+                ProcessRequest(req, res, mtPatch);
               end);
+            FLogger.Debug('PATCH route successfully registered with Horse');
+          end
+          else
+            if AHTTPMethod = 'DELETE' then
+            begin
+              FLogger.Debug('Registering DELETE route with Horse: ' + fullPath);
+              THorse.Delete(fullPath,
+                procedure(req: THorseRequest; res: THorseResponse)
+                begin
+                  FLogger.Debug('Horse DELETE handler called for: ' + req.RawWebRequest.PathInfo);
+                  ProcessRequest(req, res, mtDelete);
+                end);
+              FLogger.Debug('DELETE route successfully registered with Horse');
+            end
+            else
+            begin
+              FLogger.Error('Unknown HTTP method: ' + AHTTPMethod);
+            end;
+  except
+    on E: Exception do
+    begin
+      FLogger.Error(Format('Error registering route %s %s with Horse: %s', [AHTTPMethod, fullPath, E.Message]));
+      raise;
+    end;
+  end;
 
-  LogRouteRegistration(AHTTPMethod, fullPath, AControllerClass.ClassName);
+  LogRouteRegistration(AHTTPMethod, fullPath, AControllerClass.ClassName, AMethodName);
 end;
 
 function TNest4DApplication.GetControllerInstance(const AMethodInfo: TMethodInfo): TObject;
@@ -452,7 +499,7 @@ var
 begin
   Result := '';
 
-  // Try exact match first
+  // Try exact match first (for all HTTP methods in dictionary)
   for pair in FMethodsDictionary do
   begin
     if pair.Value.Path = ARequestedPath then
@@ -465,8 +512,74 @@ begin
   // Try parameter matching (/users/:id)
   for pair in FMethodsDictionary do
   begin
+    // Check if this route has parameters (contains ':')
+    if Pos(':', pair.Value.Path) > 0 then
+    begin
+      // Split paths into segments
+      requestSegments := ARequestedPath.Split(['/']);
+      patternSegments := pair.Value.Path.Split(['/']);
+
+      // Check if segment count matches
+      if Length(requestSegments) = Length(patternSegments) then
+      begin
+        isMatch := True;
+
+        // Compare each segment
+        for i := 0 to High(patternSegments) do
+        begin
+          // Skip parameter segments (start with ':')
+          if not patternSegments[i].StartsWith(':') then
+          begin
+            // Must be exact match for non-parameter segments
+            if requestSegments[i] <> patternSegments[i] then
+            begin
+              isMatch := False;
+              Break;
+            end;
+          end;
+        end;
+
+        if isMatch then
+        begin
+          Result := pair.Key;
+
+          // Extract and set route parameters for Horse
+          for i := 0 to High(patternSegments) do
+          begin
+            if patternSegments[i].StartsWith(':') then
+            begin
+              // Extract parameter name (remove ':')
+              FLogger.Debug(Format('Extracted route parameter: %s = %s',
+                [Copy(patternSegments[i], 2, Length(patternSegments[i])), requestSegments[i]]));
+            end;
+          end;
+
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function TNest4DApplication.FindRouteMatchWithMethod(const ARequestedPath: String; const AHTTPMethod: String): String;
+var
+  pair                            : TPair<String, TMethodInfo>;
+  requestSegments, patternSegments: TArray<String>;
+  i                               : Integer;
+  isMatch                         : Boolean;
+  routeHttpMethod                 : String;
+begin
+  Result := '';
+
+  // Try parameter matching (/users/:id) for specific HTTP method
+  for pair in FMethodsDictionary do
+  begin
     // Extract HTTP method from route key (format: "GET:/api/users/:id")
-    HTTPMethod := Copy(pair.Key, 1, Pos(':', pair.Key) - 1);
+    routeHttpMethod := Copy(pair.Key, 1, Pos(':', pair.Key) - 1);
+
+    // Only check routes for the specific HTTP method
+    if routeHttpMethod <> AHTTPMethod then
+      Continue;
 
     // Check if this route has parameters (contains ':')
     if Pos(':', pair.Value.Path) > 0 then
@@ -517,9 +630,31 @@ begin
   end;
 end;
 
-procedure TNest4DApplication.LogRouteRegistration(const AHTTPMethod, APath, AControllerName: String);
+procedure TNest4DApplication.LogRouteRegistration(const AHTTPMethod, APath, AControllerName, AMethodName: string);
 begin
-  FLogger.Info(Format('Route registered: %s %s -> %s', [AHTTPMethod, APath, AControllerName]));
+  FLogger.Info(Format('Route registered: %s %s -> %s.%s', [AHTTPMethod, APath, AControllerName, AMethodName]));
+end;
+
+procedure TNest4DApplication.DebugRoutes;
+var
+  route     : string;
+  methodInfo: TMethodInfo;
+begin
+  FLogger.Info('=== DETAILED ROUTE DEBUG ===');
+  FLogger.Info('Total routes registered: ' + IntToStr(FMethodsDictionary.Count));
+
+  for route in FMethodsDictionary.Keys do
+  begin
+    methodInfo := FMethodsDictionary[route];
+    FLogger.Info(Format('Route: %s', [route]));
+    FLogger.Info(Format('  Controller: %s', [methodInfo.ControllerClass.ClassName]));
+    FLogger.Info(Format('  Method: %s', [methodInfo.MethodName]));
+    FLogger.Info(Format('  HTTP Method: %s', [methodInfo.HTTPMethod]));
+    FLogger.Info(Format('  Full Path: %s', [methodInfo.Path]));
+    FLogger.Info('  ---');
+  end;
+
+  FLogger.Info('=== END ROUTE DEBUG ===');
 end;
 
 procedure MakeResponse(method: TRttiMethod; response: THorseResponse; resultValue: TValue);
@@ -545,6 +680,8 @@ var
   method               : TRttiMethod;
   methodResult         : TValue;
   methodParams         : TArray<TValue>;
+  httpMethodStr        : String;
+  matchedRouteKey      : string;
 begin
   try
     requestPath := req.RawWebRequest.PathInfo;
@@ -578,18 +715,50 @@ begin
       mtDelete:
         FLogger.Debug(Format('Processing DELETE request for path: %s', [requestPath]));
     end;
-
     if not FMethodsDictionary.TryGetValue(routeKey, methodInfo) then
     begin
-      // Try to find a matching route with parameters
-      routeKey := FindRouteMatch(requestPath);
-      if routeKey = '' then
+      FLogger.Debug('Route not found directly: ' + routeKey);
+
+      // Try to find route with parameters using specific HTTP method
+      case MethodType of
+        mtGet:
+          httpMethodStr := 'GET';
+        mtPost:
+          httpMethodStr := 'POST';
+        mtPut:
+          httpMethodStr := 'PUT';
+        mtPatch:
+          httpMethodStr := 'PATCH';
+        mtDelete:
+          httpMethodStr := 'DELETE';
+      end;
+
+      matchedRouteKey := FindRouteMatchWithMethod(requestPath, httpMethodStr);
+      if matchedRouteKey <> '' then
       begin
-        FLogger.Warn('Route not found: ' + requestPath);
+        if FMethodsDictionary.TryGetValue(matchedRouteKey, methodInfo) then
+        begin
+          FLogger.Debug('Found matching route with parameters: ' + matchedRouteKey);
+          routeKey := matchedRouteKey; // Update routeKey for parameter extraction later
+        end
+        else
+        begin
+          FLogger.Debug('Matched route key found but not in dictionary: ' + matchedRouteKey);
+          FLogger.Error('Route not found: ' + requestPath);
+          res.Status(404).Send('Route not found');
+          Exit;
+        end;
+      end
+      else
+      begin
+        FLogger.Error('Route not found: ' + requestPath);
         res.Status(404).Send('Route not found');
         Exit;
       end;
-      methodInfo := FMethodsDictionary[routeKey];
+    end
+    else
+    begin
+      FLogger.Debug('Route found directly: ' + routeKey);
     end;
 
     // Get controller instance
