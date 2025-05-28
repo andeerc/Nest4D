@@ -99,6 +99,13 @@
         <DCCReference Include="src\app.module.pas"/>
         <DCCReference Include="src\app.service.pas"/>
         <DCCReference Include="src\app.controller.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.abstract.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.container.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.events.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.factory.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.service.abstract.pas"/>
+        <DCCReference Include="..\src\Nest4D.Injector.service.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

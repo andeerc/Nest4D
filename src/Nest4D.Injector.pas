@@ -363,11 +363,30 @@ begin
 
     // Se não, crie uma nova instância
     LParams := [];
-    if (LItem.AsInstance = nil) and (FInjectorEvents.Count = 0) then
-      LParams := _ResolverParams(LItem.ServiceClass);
+    // Só resolve parâmetros se não há eventos configurados
+    if FInjectorEvents.Count = 0 then
+    begin
+      try
+        LParams := _ResolverParams(LItem.ServiceClass);
+      except
+        on E: Exception do
+        begin
+          WriteLn('Warning: Could not resolve parameters for ' + LItem.ServiceClass.ClassName + ': ' + E.Message);
+          LParams := []; // Use empty parameters if resolution fails
+        end;
+      end;
+    end;
 
-    Result := LItem.GetInstance(FInjectorEvents, LParams);
-    Exit;
+    try
+      Result := LItem.GetInstance(FInjectorEvents, LParams);
+      Exit;
+    except
+      on E: Exception do
+      begin
+        WriteLn('Error creating instance of ' + LItem.ServiceClass.ClassName + ': ' + E.Message);
+        raise;
+      end;
+    end;
   end;
 
   // Tenta buscar no container pai/filhos
@@ -385,25 +404,47 @@ begin
   end;
 
   // Se chegou aqui, o tipo não foi encontrado. Vamos tentar registrá-lo automaticamente
+  // mas apenas se não for uma classe abstrata ou interface
   try
-    // Registrar o tipo automaticamente como singleton
-    Singleton(AClass);
-
-    // Tentar obter a instância novamente
-    if FInstances.TryGetValue(LClassName, LItem) then
+    if not IsRegistered(AClass) then
     begin
-      LParams := [];
-      if (LItem.AsInstance = nil) and (FInjectorEvents.Count = 0) then
-        LParams := _ResolverParams(LItem.ServiceClass);
+      // Registrar o tipo automaticamente como singleton
+      Singleton(AClass);
 
-      Result := LItem.GetInstance(FInjectorEvents, LParams);
+      // Tentar obter a instância novamente
+      if FInstances.TryGetValue(LClassName, LItem) then
+      begin
+        LParams := [];
+        if FInjectorEvents.Count = 0 then
+        begin
+          try
+            LParams := _ResolverParams(LItem.ServiceClass);
+          except
+            on E: Exception do
+            begin
+              WriteLn('Warning: Could not resolve parameters for auto-registered ' + LItem.ServiceClass.ClassName + ': ' + E.Message);
+              LParams := [];
+            end;
+          end;
+        end;
+
+        try
+          Result := LItem.GetInstance(FInjectorEvents, LParams);
+        except
+          on E: Exception do
+          begin
+            WriteLn('Error creating auto-registered instance of ' + LItem.ServiceClass.ClassName + ': ' + E.Message);
+            // Don't re-raise to avoid breaking the application
+          end;
+        end;
+      end;
     end;
   except
     on E: Exception do
     begin
       // Só registrar o erro, mas não repassar a exceção
       // para manter a compatibilidade com o comportamento anterior
-      WriteLn('Erro ao registrar classe automaticamente: ' + E.Message);
+      WriteLn('Error auto-registering class ' + AClass.ClassName + ': ' + E.Message);
     end;
   end;
 end;
@@ -579,6 +620,8 @@ var
   LParameters: TArray<TRttiParameter>;
   LParameterValues: TArray<TValue>;
   LFor: integer;
+  LObj: TObject;
+  LIntfValue: TValue;
 begin
   Result := [];
   LRttiContext := TRttiContext.Create;
@@ -586,8 +629,20 @@ begin
     LRttiType := LRttiContext.GetType(AClass);
     if not Assigned(LRttiType) then
       exit;
+    
     LRttiMethod := LRttiType.GetMethod('Create');
+    if not Assigned(LRttiMethod) then
+      exit;
+      
     LParameters := LRttiMethod.GetParameters;
+    
+    // Se não há parâmetros, retorna array vazio
+    if Length(LParameters) = 0 then
+    begin
+      Result := [];
+      Exit;
+    end;
+    
     SetLength(LParameterValues, Length(LParameters));
     try
       for LFor := 0 to High(LParameters) do
@@ -597,14 +652,28 @@ begin
         case LParameterType.TypeKind of
           tkClass, tkClassRef:
           begin
-            LParameterValues[LFor] := TValue.From(Get<TObject>(String(LParameterType.Handle.Name)))
-                                            .Cast(LParameterType.Handle);
+            try
+              LObj := Get(GetTypeData(LParameterType.Handle).ClassType);
+              if Assigned(LObj) then
+                LParameterValues[LFor] := TValue.From(LObj).Cast(LParameterType.Handle)
+              else
+                LParameterValues[LFor] := TValue.From(nil);
+            except
+              LParameterValues[LFor] := TValue.From(nil);
+            end;
           end;
           tkInterface:
           begin
-            LInterfaceType := LRttiContext.GetType(LParameterType.Handle) as TRttiInterfaceType;
-            LParameterValues[LFor] := _ResolverInterfaceType(LParameterType.Handle,
-                                                             LInterfaceType.GUID);
+            try
+              LInterfaceType := LRttiContext.GetType(LParameterType.Handle) as TRttiInterfaceType;
+              LIntfValue := _ResolverInterfaceType(LParameterType.Handle, LInterfaceType.GUID);
+              if not LIntfValue.IsEmpty then
+                LParameterValues[LFor] := LIntfValue
+              else
+                LParameterValues[LFor] := TValue.From(nil);
+            except
+              LParameterValues[LFor] := TValue.From(nil);
+            end;
           end;
           else
             LParameterValues[LFor] := TValue.From(nil);
@@ -612,7 +681,7 @@ begin
       end;
     except
       on E: Exception do
-        raise Exception.Create(E.Message + ' => ' + ToStringParams(LParameterValues));
+        raise Exception.Create('Error resolving parameters for ' + AClass.ClassName + ': ' + E.Message + ' => ' + ToStringParams(LParameterValues));
     end;
     Result := LParameterValues;
   finally

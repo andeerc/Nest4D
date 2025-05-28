@@ -44,6 +44,7 @@ type
 
     // Constructor parameter resolution
     function ResolveConstructorParameters(const AClass: TClass): TConstructorParams;
+    function ResolveInterface(const AInterfaceType: TRttiType): TValue;
 
     // Request processing
     procedure ProcessRequest(req: THorseRequest; res: THorseResponse; const MethodType: THTTPMethodType);
@@ -81,14 +82,25 @@ begin
   FMethodsDictionary := TDictionary<String, TMethodInfo>.Create;
   FRttiContext := TRttiContext.Create;
 
-  // Initialize logger - register default logger service
+  // Initialize logger first - register default logger service
   try
-    N4DInjector.SingletonInterface<INest4DLogger, TNest4DDefaultLogger>;
+    // Register the logger interface with its implementation
+    if not N4DInjector.IsRegistered('TNest4DDefaultLogger') then
+      N4DInjector.SingletonInterface<INest4DLogger, TNest4DDefaultLogger>;
     FLogger := N4DInjector.GetInterface<INest4DLogger>;
+    if not Assigned(FLogger) then
+      raise Exception.Create('Failed to get logger interface');
   except
-    FLogger := TNest4DDefaultLogger.Create;
+    on E: Exception do
+    begin
+      // Fallback to direct instance
+      FLogger := TNest4DDefaultLogger.Create;
+      WriteLn('Warning: Using fallback logger due to: ' + E.Message);
+    end;
   end;
 
+  // Now that logger is ready, proceed with initialization
+  FLogger.Info('Nest4D Application starting...');
   InternalStart();
 end;
 
@@ -489,9 +501,9 @@ end;
 
 procedure MakeResponse(method: TRttiMethod; response: THorseResponse; resultValue: TValue);
 begin
-  if resultValue.IsType<TJSONObject>() then
+  if resultValue.IsType<TJSONValue>() then
   begin
-    response.ContentType('application/json').Send(resultValue.AsType<TJSONObject>.ToJSON);
+    response.ContentType('application/json').Send(resultValue.AsType<TJSONValue>.ToJSON);
     exit;
   end;
 
@@ -682,12 +694,11 @@ begin
           // Return all route parameters as TDictionary<String, String>
           if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
           begin
-            paramDict := TDictionary<String, String>.Create;
-            try
+            paramDict := TDictionary<String, String>.Create;            try
               // Add all route parameters to dictionary
               for j := 0 to ARequest.Params.Count - 1 do
               begin
-                paramDict.Add(ARequest.Params.Dictionary.Keys.ToArray[j], ARequest.Params.Dictionary.Keys.ToArray[j]);
+                paramDict.Add(ARequest.Params.Dictionary.Keys.ToArray[j], ARequest.Params.Items[ARequest.Params.Dictionary.Keys.ToArray[j]]);
               end;
               paramValues[i] := TValue.From<TDictionary<String, String>>(paramDict);
               FLogger.Debug(Format('Resolved all route parameters as TDictionary for %s', [methodParam.Name]));
@@ -740,11 +751,10 @@ begin
           if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
           begin
             queryDict := TDictionary<String, String>.Create;
-            try
-              // Add all query parameters to dictionary
+            try              // Add all query parameters to dictionary
               for j := 0 to ARequest.Query.Count - 1 do
               begin
-                queryDict.Add(ARequest.Query.Dictionary.Keys.ToArray[j], ARequest.Query.Dictionary.Values.ToArray[j]);
+                queryDict.Add(ARequest.Query.Dictionary.Keys.ToArray[j], ARequest.Query.Dictionary.Keys.ToArray[j]);
               end;
               paramValues[i] := TValue.From<TDictionary<String, String>>(queryDict);
               FLogger.Debug(Format('Resolved all query parameters as TDictionary for %s', [methodParam.Name]));
@@ -797,11 +807,10 @@ begin
           if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
           begin
             headerDict := TDictionary<String, String>.Create;
-            try
-              // Add all headers to dictionary
+            try              // Add all headers to dictionary
               for j := 0 to ARequest.Headers.Count - 1 do
               begin
-                headerDict.Add(ARequest.Headers.Dictionary.Keys.ToArray[j], ARequest.Headers.Dictionary.Values.ToArray[j]);
+                headerDict.Add(ARequest.Headers.Dictionary.Keys.ToArray[j], ARequest.Headers.Dictionary.Keys.ToArray[j]);
               end;
               paramValues[i] := TValue.From<TDictionary<String, String>>(headerDict);
               FLogger.Debug(Format('Resolved all headers as TDictionary for %s', [methodParam.Name]));
@@ -845,27 +854,19 @@ begin
         paramValues[i] := TValue.From<THorseResponse>(AResponse);
         FLogger.Debug('Injected THorseResponse parameter');
         isParamResolved := True;
-      end
-
-      // Handle dependency injection for interfaces and classes
+      end      // Handle dependency injection for interfaces and classes
       else if paramType.TypeKind = tkInterface then
       begin
         try
-          if paramType.QualifiedName = 'Nest4D.Logger.INest4DLogger' then
+          paramValues[i] := ResolveInterface(paramType);
+          if not paramValues[i].IsEmpty then
           begin
-            paramValues[i] := TValue.From<INest4DLogger>(N4DInjector.GetInterface<INest4DLogger>);
             FLogger.Debug(Format('Resolved interface parameter %s via DI', [paramType.Name]));
             isParamResolved := True;
-          end
-          else
+          end          else
           begin
-            interfaceService := N4DInjector.Get(paramTypeInfo);
-            if interfaceService <> nil then
-            begin
-              paramValues[i] := TValue.From(interfaceService);
-              FLogger.Debug(Format('Resolved interface parameter %s via DI as object', [paramType.Name]));
-              isParamResolved := True;
-            end;
+            FLogger.Warn(Format('Could not resolve interface parameter %s', [paramType.Name]));
+            isParamResolved := False;
           end;
         except
           on E: Exception do
@@ -1017,7 +1018,7 @@ var
   serviceClass: TClass;
 begin
   FLogger.Debug('Analyzing dependencies for controller: ' + AController.ClassName);
-  
+
   controllerType := FRttiContext.GetType(AController);
   if controllerType = nil then
     Exit;
@@ -1069,7 +1070,7 @@ var
   i: Integer;
 begin
   SetLength(Result, 0);
-  
+
   classType := FRttiContext.GetType(AClass);
   if classType = nil then
     Exit;
@@ -1080,7 +1081,7 @@ begin
     if constructorMethod.IsConstructor and (constructorMethod.Name = 'Create') then
     begin
       SetLength(Result, Length(constructorMethod.GetParameters));
-      
+
       // Resolve each parameter
       for i := 0 to High(constructorMethod.GetParameters) do
       begin
@@ -1100,22 +1101,14 @@ begin
             begin
               FLogger.Warn(Format('Could not resolve constructor parameter %s', [constructorParam.Name]));
               Result[i] := TValue.Empty;
-            end;
-          end
+            end;          end
           else if paramType.TypeKind = tkInterface then
           begin
-            // Try to get interface service
-            service := N4DInjector.Get(paramType.Handle);
-            if service <> nil then
-            begin
-              Result[i] := TValue.From(service);
-              FLogger.Debug(Format('Resolved interface constructor parameter %s via DI', [constructorParam.Name]));
-            end
+            Result[i] := ResolveInterface(paramType);
+            if not Result[i].IsEmpty then
+              FLogger.Debug(Format('Resolved interface constructor parameter %s via DI', [constructorParam.Name]))
             else
-            begin
               FLogger.Warn(Format('Could not resolve interface constructor parameter %s', [constructorParam.Name]));
-              Result[i] := TValue.Empty;
-            end;
           end
           else
           begin
@@ -1180,6 +1173,38 @@ begin
 
   if Result = nil then
     FLogger.Error('Could not find suitable constructor for: ' + AClass.ClassName);
+end;
+
+function TNest4DApplication.ResolveInterface(const AInterfaceType: TRttiType): TValue;
+begin
+  Result := TValue.Empty;
+
+  // Casos específicos conhecidos
+  if AInterfaceType.QualifiedName = 'Nest4D.Logger.INest4DLogger' then
+  begin
+    try
+      Result := TValue.From<INest4DLogger>(N4DInjector.GetInterface<INest4DLogger>);
+      FLogger.Debug('Resolved INest4DLogger interface');
+      Exit;
+    except
+      on E: Exception do
+        FLogger.Warn('Failed to resolve INest4DLogger: ' + E.Message);
+    end;
+  end;
+
+  // Adicione aqui outros casos específicos de interfaces conforme necessário
+  // Por exemplo:
+  // if AInterfaceType.QualifiedName = 'MyApp.IMyService' then
+  // begin
+  //   try
+  //     Result := TValue.From<IMyService>(N4DInjector.GetInterface<IMyService>);
+  //     Exit;
+  //   except
+  //     // handle error
+  //   end;
+  // end;
+
+  FLogger.Warn(Format('Interface %s não está registrada para resolução automática', [AInterfaceType.Name]));
 end;
 
 end.
