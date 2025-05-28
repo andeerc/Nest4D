@@ -1,0 +1,132 @@
+2025-05-28 13:54:01.948 [INFO] Nest4D Application starting...
+2025-05-28 13:54:01.957 [INFO] Starting Nest4D application initialization...
+2025-05-28 13:54:01.964 [DEBUG] Registering module: TAppModule
+2025-05-28 13:54:01.969 [DEBUG] Calling module Configure method
+2025-05-28 13:54:10.242 [ERROR] Error in module Configure method: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:54:10.287 [ERROR] Error processing module dependencies: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:54:10.311 [INFO] Module registered successfully: TAppModule
+2025-05-28 13:54:10.318 [INFO] Total load time: 8360 ms
+2025-05-28 13:54:10.324 [INFO] Starting Nest4D application on port 3030
+2025-05-28 13:55:05.970 [INFO] Nest4D Application starting...
+2025-05-28 13:55:07.077 [INFO] Starting Nest4D application initialization...
+2025-05-28 13:55:07.085 [DEBUG] Registering module: TAppModule
+2025-05-28 13:55:07.091 [DEBUG] Calling module Configure method
+2025-05-28 13:55:10.194 [ERROR] Error in module Configure method: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:55:10.237 [ERROR] Error processing module dependencies: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:55:10.261 [INFO] Module registered successfully: TAppModule
+2025-05-28 13:55:10.267 [INFO] Total load time: 3190 ms
+2025-05-28 13:55:10.272 [INFO] Starting Nest4D application on port 3030
+2025-05-28 13:55:25.495 [INFO] Nest4D Application starting...
+2025-05-28 13:55:26.448 [INFO] Starting Nest4D application initialization...
+2025-05-28 13:55:30.425 [DEBUG] Registering module: TAppModule
+2025-05-28 13:55:32.481 [DEBUG] Calling module Configure method
+2025-05-28 13:55:34.418 [ERROR] Error in module Configure method: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:55:34.459 [ERROR] Error processing module dependencies: Interface TNest4DDefaultLogger registered!
+2025-05-28 13:55:34.482 [INFO] Module registered successfully: TAppModule
+2025-05-28 13:55:34.490 [INFO] Total load time: 8985 ms
+2025-05-28 13:55:34.496 [INFO] Starting Nest4D application on port 3030
+2025-05-28 13:56:31.856 [INFO] Nest4D Application starting...
+2025-05-28 13:56:34.941 [INFO] Starting Nest4D application initialization...
+2025-05-28 13:56:34.948 [DEBUG] Registering module: TAppModule
+2025-05-28 13:56:34.953 [DEBUG] Calling module Configure method
+2025-05-28 13:56:34.960 [INFO] Module Configure method executed successfully
+2025-05-28 13:56:34.965 [DEBUG] Registering service: TAppService
+2025-05-28 13:56:34.970 [INFO] Service registered: TAppService
+2025-05-28 13:56:34.975 [DEBUG] Registering controller: TAppController
+2025-05-28 13:56:34.980 [DEBUG] Analyzing dependencies for controller: TAppController
+2025-05-28 13:56:34.985 [DEBUG] Interface dependency found: INest4DLogger
+2025-05-28 13:56:34.991 [INFO] Controller registered: TAppController
+2025-05-28 13:56:34.996 [INFO] Route registered: GET /api -> TAppController
+2025-05-28 13:56:35.001 [INFO] Route registered: GET /api/health -> TAppController
+2025-05-28 13:56:35.005 [INFO] Route registered: POST /api/process -> TAppController
+2025-05-28 13:56:35.011 [INFO] Route registered: GET /api/teste/:id -> TAppController
+2025-05-28 13:56:35.017 [INFO] Route registered: GET /api/items -> TAppController
+2025-05-28 13:56:35.023 [INFO] Route registered: POST /api/items -> TAppController
+2025-05-28 13:56:35.029 [INFO] Route registered: GET /api/search -> TAppController
+2025-05-28 13:56:35.035 [INFO] Route registered: GET /api/info -> TAppController
+2025-05-28 13:56:35.042 [INFO] Route registered: GET /api/auth -> TAppController
+2025-05-28 13:56:35.047 [INFO] Route registered: GET /api/debug -> TAppController
+2025-05-28 13:56:35.052 [INFO] Route registered: GET /api/users/:userId/posts/:postId -> TAppController
+2025-05-28 13:56:35.058 [INFO] Route registered: POST /api/data -> TAppController
+2025-05-28 13:56:35.063 [INFO] Route registered: POST /api/text -> TAppController
+2025-05-28 13:56:35.068 [INFO] Route registered: POST /api/logger/config -> TAppController
+2025-05-28 13:56:35.073 [INFO] Route registered: GET /api/logger/test -> TAppController
+2025-05-28 13:56:35.080 [INFO] Route registered: GET /api/logger/constructor-test -> TAppController
+2025-05-28 13:56:35.085 [INFO] Module registered successfully: TAppModule
+2025-05-28 13:56:35.091 [INFO] Total load time: 3224 ms
+2025-05-28 13:56:35.096 [INFO] Starting Nest4D application on port 3030
+2025-05-28 13:57:16.033 [INFO] Nest4D Application starting...
+2025-05-28 13:57:16.044 [INFO] Starting Nest4D application initialization...
+2025-05-28 13:57:16.049 [DEBUG] Registering module: TAppModule
+2025-05-28 13:57:16.056 [DEBUG] Calling module Configure method
+2025-05-28 13:57:16.063 [INFO] Module Configure method executed successfully
+2025-05-28 13:57:16.069 [DEBUG] Registering service: TAppService
+2025-05-28 13:57:16.076 [INFO] Service registered: TAppService
+2025-05-28 13:57:16.082 [DEBUG] Registering controller: TAppController
+2025-05-28 13:57:16.087 [DEBUG] Analyzing dependencies for controller: TAppController
+2025-05-28 13:57:16.094 [DEBUG] Interface dependency found: INest4DLogger
+2025-05-28 13:57:16.100 [INFO] Controller registered: TAppController
+2025-05-28 13:57:16.106 [INFO] Route registered: GET /api -> TAppController
+2025-05-28 13:57:16.114 [INFO] Route registered: GET /api/health -> TAppController
+2025-05-28 13:57:16.119 [INFO] Route registered: POST /api/process -> TAppController
+2025-05-28 13:57:16.127 [INFO] Route registered: GET /api/teste/:id -> TAppController
+2025-05-28 13:57:16.134 [INFO] Route registered: GET /api/items -> TAppController
+2025-05-28 13:57:16.141 [INFO] Route registered: POST /api/items -> TAppController
+2025-05-28 13:57:16.148 [INFO] Route registered: GET /api/search -> TAppController
+2025-05-28 13:57:16.156 [INFO] Route registered: GET /api/info -> TAppController
+2025-05-28 13:57:16.163 [INFO] Route registered: GET /api/auth -> TAppController
+2025-05-28 13:57:16.169 [INFO] Route registered: GET /api/debug -> TAppController
+2025-05-28 13:57:16.177 [INFO] Route registered: GET /api/users/:userId/posts/:postId -> TAppController
+2025-05-28 13:57:16.183 [INFO] Route registered: POST /api/data -> TAppController
+2025-05-28 13:57:16.190 [INFO] Route registered: POST /api/text -> TAppController
+2025-05-28 13:57:16.197 [INFO] Route registered: POST /api/logger/config -> TAppController
+2025-05-28 13:57:16.203 [INFO] Route registered: GET /api/logger/test -> TAppController
+2025-05-28 13:57:16.210 [INFO] Route registered: GET /api/logger/constructor-test -> TAppController
+2025-05-28 13:57:16.216 [INFO] Module registered successfully: TAppModule
+2025-05-28 13:57:16.221 [INFO] Total load time: 178 ms
+2025-05-28 13:57:16.228 [INFO] Starting Nest4D application on port 3030
+2025-05-28 13:57:25.714 [DEBUG] Processing GET request for path: /api/users/10/posts/9
+2025-05-28 13:57:25.725 [DEBUG] Extracted route parameter: userId = 10
+2025-05-28 13:57:25.731 [DEBUG] Extracted route parameter: postId = 9
+2025-05-28 13:57:25.737 [INFO] AppService created successfully (parameterless constructor)
+2025-05-28 13:57:25.744 [DEBUG] Resolved constructor parameter AAppService via DI
+2025-05-28 13:57:25.751 [DEBUG] Resolved INest4DLogger interface
+2025-05-28 13:57:25.757 [DEBUG] Resolved interface constructor parameter ALogger via DI
+2025-05-28 13:57:25.763 [INFO] AppController created successfully
+2025-05-28 13:57:25.769 [DEBUG] Controller instance obtained from injector: TAppController
+2025-05-28 13:57:25.776 [DEBUG] Resolving parameter allParams of type TDictionary<System.string,System.string>
+2025-05-28 13:57:25.782 [DEBUG] Resolved all route parameters as TDictionary for allParams
+2025-05-28 13:57:25.788 [DEBUG] Invoking method getUserPost on controller TAppController
+2025-05-28 13:57:25.795 [DEBUG] Getting user post with all route parameters
+2025-05-28 13:57:26.843 [DEBUG] Processing GET request for path: /api/users/10/posts/9
+2025-05-28 13:57:26.852 [DEBUG] Extracted route parameter: userId = 10
+2025-05-28 13:57:26.860 [DEBUG] Extracted route parameter: postId = 9
+2025-05-28 13:57:26.866 [DEBUG] Controller instance obtained from injector: TAppController
+2025-05-28 13:57:26.874 [DEBUG] Resolving parameter allParams of type TDictionary<System.string,System.string>
+2025-05-28 13:57:26.880 [DEBUG] Resolved all route parameters as TDictionary for allParams
+2025-05-28 13:57:26.886 [DEBUG] Invoking method getUserPost on controller TAppController
+2025-05-28 13:57:26.894 [DEBUG] Getting user post with all route parameters
+2025-05-28 13:57:27.211 [DEBUG] Processing GET request for path: /api/users/10/posts/9
+2025-05-28 13:57:27.220 [DEBUG] Extracted route parameter: userId = 10
+2025-05-28 13:57:27.228 [DEBUG] Extracted route parameter: postId = 9
+2025-05-28 13:57:27.234 [DEBUG] Controller instance obtained from injector: TAppController
+2025-05-28 13:57:27.241 [DEBUG] Resolving parameter allParams of type TDictionary<System.string,System.string>
+2025-05-28 13:57:27.248 [DEBUG] Resolved all route parameters as TDictionary for allParams
+2025-05-28 13:57:27.255 [DEBUG] Invoking method getUserPost on controller TAppController
+2025-05-28 13:57:27.262 [DEBUG] Getting user post with all route parameters
+2025-05-28 13:57:27.918 [DEBUG] Processing GET request for path: /api/users/10/posts/9
+2025-05-28 13:57:27.928 [DEBUG] Extracted route parameter: userId = 10
+2025-05-28 13:57:27.935 [DEBUG] Extracted route parameter: postId = 9
+2025-05-28 13:57:27.945 [DEBUG] Controller instance obtained from injector: TAppController
+2025-05-28 13:57:27.952 [DEBUG] Resolving parameter allParams of type TDictionary<System.string,System.string>
+2025-05-28 13:57:27.960 [DEBUG] Resolved all route parameters as TDictionary for allParams
+2025-05-28 13:57:27.967 [DEBUG] Invoking method getUserPost on controller TAppController
+2025-05-28 13:57:27.977 [DEBUG] Getting user post with all route parameters
+2025-05-28 13:57:31.691 [DEBUG] Processing GET request for path: /api/users/10/posts/9
+2025-05-28 13:57:31.701 [DEBUG] Extracted route parameter: userId = 10
+2025-05-28 13:57:31.710 [DEBUG] Extracted route parameter: postId = 9
+2025-05-28 13:57:31.717 [DEBUG] Controller instance obtained from injector: TAppController
+2025-05-28 13:57:31.725 [DEBUG] Resolving parameter allParams of type TDictionary<System.string,System.string>
+2025-05-28 13:57:31.734 [DEBUG] Resolved all route parameters as TDictionary for allParams
+2025-05-28 13:57:31.742 [DEBUG] Invoking method getUserPost on controller TAppController
+2025-05-28 13:57:31.749 [DEBUG] Getting user post with all route parameters

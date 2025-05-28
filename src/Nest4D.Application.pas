@@ -25,19 +25,19 @@ type
 
   TNest4DApplication = class
   private
-    FAppModule: TClass;
-    FCallback: TProc<TNest4DApplication>;
+    FAppModule        : TClass;
+    FCallback         : TProc<TNest4DApplication>;
     FMethodsDictionary: TDictionary<String, TMethodInfo>;
-    FRttiContext: TRttiContext;
-    FLogger: INest4DLogger;
+    FRttiContext      : TRttiContext;
+    FLogger           : INest4DLogger;
 
     // Core initialization
-    procedure InternalStart;    // Module and dependency registration
+    procedure InternalStart; // Module and dependency registration
     procedure RegisterModule(AModule: TClass);
     procedure RegisterDependencies(AType: TRttiType);
     procedure RegisterService(AService: TClass);
     procedure RegisterController(AController: TClass);
-    procedure RegisterControllerWithDependencies(AController: TClass);    // Route registration helpers
+    procedure RegisterControllerWithDependencies(AController: TClass); // Route registration helpers
     procedure RegisterControllerRoutes(AController: TClass; AControllerType: TRttiType; const AControllerPath: String);
     procedure RegisterSingleRoute(const AHTTPMethod, AControllerPath, ARoutePath, AMethodName: String;
       AControllerClass: TClass; AControllerType: TRttiType);
@@ -50,7 +50,8 @@ type
     procedure ProcessRequest(req: THorseRequest; res: THorseResponse; const MethodType: THTTPMethodType);
     function GetControllerInstance(const AMethodInfo: TMethodInfo): TObject;
     function CreateInstanceWithDependencies(const AClass: TClass): TObject;
-    function ResolveMethodParameters(const AMethod: TRttiMethod; ARequest: THorseRequest; AResponse: THorseResponse): TArray<TValue>;
+    function ResolveMethodParameters(const AMethod: TRttiMethod; ARequest: THorseRequest; AResponse: THorseResponse)
+      : TArray<TValue>;
 
     // Utility methods
     function BuildRouteKey(const AHTTPMethod, APath: String): String;
@@ -80,13 +81,14 @@ begin
   Self.FAppModule    := AAppModule;
   Self.FCallback     := ACallback;
   FMethodsDictionary := TDictionary<String, TMethodInfo>.Create;
-  FRttiContext := TRttiContext.Create;
+  FRttiContext       := TRttiContext.Create;
 
   // Initialize logger first - register default logger service
   try
     // Register the logger interface with its implementation
-    if not N4DInjector.IsRegistered('TNest4DDefaultLogger') then
+    if not N4DInjector.IsRegistered<INest4DLogger>() then
       N4DInjector.SingletonInterface<INest4DLogger, TNest4DDefaultLogger>;
+
     FLogger := N4DInjector.GetInterface<INest4DLogger>;
     if not Assigned(FLogger) then
       raise Exception.Create('Failed to get logger interface');
@@ -158,8 +160,8 @@ end;
 
 procedure TNest4DApplication.RegisterDependencies(AType: TRttiType);
 var
-  moduleInstance: TObject;
-  module: IN4DModule;
+  moduleInstance     : TObject;
+  module             : IN4DModule;
   service, controller: TClass;
 begin
   // Try to create an instance of the module to get its configuration
@@ -168,6 +170,19 @@ begin
     try
       if Supports(moduleInstance, IN4DModule, module) then
       begin
+        FLogger.Debug('Calling module Configure method');
+
+        // Call the Configure method to allow custom configurations
+        try
+          module.Configure;
+          FLogger.Info('Module Configure method executed successfully');
+        except
+          on E: Exception do
+          begin
+            FLogger.Error('Error in module Configure method: ' + E.Message);
+            raise;
+          end;
+        end;
         // Register services
         for service in module.Services do
         begin
@@ -215,14 +230,14 @@ end;
 
 procedure TNest4DApplication.RegisterController(AController: TClass);
 var
-  controllerType: TRttiType;
+  ControllerType: TRttiType;
   controllerPath: String;
-  attr: TCustomAttribute;
+  attr          : TCustomAttribute;
 begin
   FLogger.Debug('Registering controller: ' + AController.ClassName);
 
-  controllerType := FRttiContext.GetType(AController);
-  if controllerType = nil then
+  ControllerType := FRttiContext.GetType(AController);
+  if ControllerType = nil then
   begin
     FLogger.Error('Could not get RTTI type for controller: ' + AController.ClassName);
     Exit;
@@ -234,7 +249,7 @@ begin
   // Register controller as a service with custom constructor callback
   try
     N4DInjector.Singleton(AController,
-      function: TConstructorParams
+        function: TConstructorParams
       begin
         Result := ResolveConstructorParameters(AController);
       end);
@@ -246,81 +261,84 @@ begin
 
   // Get controller base path
   controllerPath := '';
-  for attr in controllerType.GetAttributes do
+  for attr in ControllerType.GetAttributes do
   begin
-    if attr is Controller then
+    if attr is controller then
     begin
-      controllerPath := Controller(attr).Path;
+      controllerPath := controller(attr).Path;
       Break;
     end;
   end;
 
-  RegisterControllerRoutes(AController, controllerType, controllerPath);
+  RegisterControllerRoutes(AController, ControllerType, controllerPath);
 end;
 
-procedure TNest4DApplication.RegisterControllerRoutes(AController: TClass;
-  AControllerType: TRttiType; const AControllerPath: String);
+procedure TNest4DApplication.RegisterControllerRoutes(AController: TClass; AControllerType: TRttiType;
+const AControllerPath: String);
 var
-  method: TRttiMethod;
-  attr: TCustomAttribute;
-  httpMethod, routePath: String;
+  method               : TRttiMethod;
+  attr                 : TCustomAttribute;
+  HTTPMethod, routePath: String;
 begin
   for method in AControllerType.GetMethods do
   begin
     for attr in method.GetAttributes do
     begin
-      httpMethod := '';
-      routePath := '';
+      HTTPMethod := '';
+      routePath  := '';
 
       if attr is Get then
       begin
-        httpMethod := 'GET';
-        routePath := Get(attr).Path;
+        HTTPMethod := 'GET';
+        routePath  := Get(attr).Path;
       end
-      else if attr is Post then
-      begin
-        httpMethod := 'POST';
-        routePath := Post(attr).Path;
-      end
-      else if attr is Put then
-      begin
-        httpMethod := 'PUT';
-        routePath := Put(attr).Path;
-      end
-      else if attr is Patch then
-      begin
-        httpMethod := 'PATCH';
-        routePath := Patch(attr).Path;
-      end
-      else if attr is Delete then
-      begin
-        httpMethod := 'DELETE';
-        routePath := Delete(attr).Path;
-      end;
+      else
+        if attr is Post then
+        begin
+          HTTPMethod := 'POST';
+          routePath  := Post(attr).Path;
+        end
+        else
+          if attr is Put then
+          begin
+            HTTPMethod := 'PUT';
+            routePath  := Put(attr).Path;
+          end
+          else
+            if attr is Patch then
+            begin
+              HTTPMethod := 'PATCH';
+              routePath  := Patch(attr).Path;
+            end
+            else
+              if attr is Delete then
+              begin
+                HTTPMethod := 'DELETE';
+                routePath  := Delete(attr).Path;
+              end;
 
-      if httpMethod <> '' then
+      if HTTPMethod <> '' then
       begin
-        RegisterSingleRoute(httpMethod, AControllerPath, routePath,
-          method.Name, AController, AControllerType);
+        RegisterSingleRoute(HTTPMethod, AControllerPath, routePath, method.Name, AController, AControllerType);
       end;
     end;
   end;
 end;
 
-procedure TNest4DApplication.RegisterSingleRoute(const AHTTPMethod, AControllerPath,
-  ARoutePath, AMethodName: String; AControllerClass: TClass; AControllerType: TRttiType);
+procedure TNest4DApplication.RegisterSingleRoute(const AHTTPMethod, AControllerPath, ARoutePath, AMethodName: String;
+AControllerClass: TClass; AControllerType: TRttiType);
 var
   fullPath, routeKey: String;
-  methodInfo: TMethodInfo;
+  methodInfo        : TMethodInfo;
 begin
   fullPath := NormalizePath(AControllerPath + ARoutePath);
   routeKey := BuildRouteKey(AHTTPMethod, fullPath);
 
-  methodInfo.ControllerType := AControllerType;
+  methodInfo.ControllerType  := AControllerType;
   methodInfo.ControllerClass := AControllerClass;
-  methodInfo.MethodName := AMethodName;
-  methodInfo.Path := fullPath;
-  methodInfo.HTTPMethod := AHTTPMethod;
+  methodInfo.MethodName      := AMethodName;
+  methodInfo.Path            := fullPath;
+  methodInfo.HTTPMethod      := AHTTPMethod;
 
   FMethodsDictionary.Add(routeKey, methodInfo);
 
@@ -331,30 +349,34 @@ begin
       begin
         ProcessRequest(req, res, mtGet);
       end)
-  else if AHTTPMethod = 'POST' then
-    THorse.Post(fullPath,
-      procedure(req: THorseRequest; res: THorseResponse)
-      begin
-        ProcessRequest(req, res, mtPost);
-      end)
-  else if AHTTPMethod = 'PUT' then
-    THorse.Put(fullPath,
-      procedure(req: THorseRequest; res: THorseResponse)
-      begin
-        ProcessRequest(req, res, mtPut);
-      end)
-  else if AHTTPMethod = 'PATCH' then
-    THorse.Patch(fullPath,
-      procedure(req: THorseRequest; res: THorseResponse)
-      begin
-        ProcessRequest(req, res, mtPatch);
-      end)
-  else if AHTTPMethod = 'DELETE' then
-    THorse.Delete(fullPath,
-      procedure(req: THorseRequest; res: THorseResponse)
-      begin
-        ProcessRequest(req, res, mtDelete);
-      end);
+  else
+    if AHTTPMethod = 'POST' then
+      THorse.Post(fullPath,
+        procedure(req: THorseRequest; res: THorseResponse)
+        begin
+          ProcessRequest(req, res, mtPost);
+        end)
+    else
+      if AHTTPMethod = 'PUT' then
+        THorse.Put(fullPath,
+          procedure(req: THorseRequest; res: THorseResponse)
+          begin
+            ProcessRequest(req, res, mtPut);
+          end)
+      else
+        if AHTTPMethod = 'PATCH' then
+          THorse.Patch(fullPath,
+            procedure(req: THorseRequest; res: THorseResponse)
+            begin
+              ProcessRequest(req, res, mtPatch);
+            end)
+        else
+          if AHTTPMethod = 'DELETE' then
+            THorse.Delete(fullPath,
+              procedure(req: THorseRequest; res: THorseResponse)
+              begin
+                ProcessRequest(req, res, mtDelete);
+              end);
 
   LogRouteRegistration(AHTTPMethod, fullPath, AControllerClass.ClassName);
 end;
@@ -374,7 +396,8 @@ begin
     end;
 
     // Fallback: register controller with dependency analysis and get
-    FLogger.Debug('Attempting to register controller with dependencies on-demand: ' + AMethodInfo.ControllerClass.ClassName);
+    FLogger.Debug('Attempting to register controller with dependencies on-demand: ' +
+      AMethodInfo.ControllerClass.ClassName);
     RegisterControllerWithDependencies(AMethodInfo.ControllerClass);
     Result := N4DInjector.Get(AMethodInfo.ControllerClass);
 
@@ -421,11 +444,11 @@ end;
 
 function TNest4DApplication.FindRouteMatch(const ARequestedPath: String): String;
 var
-  pair: TPair<String, TMethodInfo>;
+  pair                            : TPair<String, TMethodInfo>;
   requestSegments, patternSegments: TArray<String>;
-  i: Integer;
-  isMatch: Boolean;
-  httpMethod: String;
+  i                               : Integer;
+  isMatch                         : Boolean;
+  HTTPMethod                      : String;
 begin
   Result := '';
 
@@ -443,7 +466,7 @@ begin
   for pair in FMethodsDictionary do
   begin
     // Extract HTTP method from route key (format: "GET:/api/users/:id")
-    httpMethod := Copy(pair.Key, 1, Pos(':', pair.Key) - 1);
+    HTTPMethod := Copy(pair.Key, 1, Pos(':', pair.Key) - 1);
 
     // Check if this route has parameters (contains ':')
     if Pos(':', pair.Value.Path) > 0 then
@@ -504,24 +527,24 @@ begin
   if resultValue.IsType<TJSONValue>() then
   begin
     response.ContentType('application/json').Send(resultValue.AsType<TJSONValue>.ToJSON);
-    exit;
+    Exit;
   end;
 
   if resultValue.IsType<String>() then
   begin
     response.Send(resultValue.AsString);
-    exit;
+    Exit;
   end;
 end;
 
 procedure TNest4DApplication.ProcessRequest(req: THorseRequest; res: THorseResponse; const MethodType: THTTPMethodType);
 var
   requestPath, routeKey: String;
-  methodInfo: TMethodInfo;
-  instance: TObject;
-  method: TRttiMethod;
-  methodResult: TValue;
-  methodParams: TArray<TValue>;
+  methodInfo           : TMethodInfo;
+  instance             : TObject;
+  method               : TRttiMethod;
+  methodResult         : TValue;
+  methodParams         : TArray<TValue>;
 begin
   try
     requestPath := req.RawWebRequest.PathInfo;
@@ -530,20 +553,30 @@ begin
 
     // Build route key based on HTTP method
     case MethodType of
-      mtGet: routeKey := BuildRouteKey('GET', requestPath);
-      mtPost: routeKey := BuildRouteKey('POST', requestPath);
-      mtPut: routeKey := BuildRouteKey('PUT', requestPath);
-      mtPatch: routeKey := BuildRouteKey('PATCH', requestPath);
-      mtDelete: routeKey := BuildRouteKey('DELETE', requestPath);
+      mtGet:
+        routeKey := BuildRouteKey('GET', requestPath);
+      mtPost:
+        routeKey := BuildRouteKey('POST', requestPath);
+      mtPut:
+        routeKey := BuildRouteKey('PUT', requestPath);
+      mtPatch:
+        routeKey := BuildRouteKey('PATCH', requestPath);
+      mtDelete:
+        routeKey := BuildRouteKey('DELETE', requestPath);
     end;
 
     // Log request processing
     case MethodType of
-      mtGet: FLogger.Debug(Format('Processing GET request for path: %s', [requestPath]));
-      mtPost: FLogger.Debug(Format('Processing POST request for path: %s', [requestPath]));
-      mtPut: FLogger.Debug(Format('Processing PUT request for path: %s', [requestPath]));
-      mtPatch: FLogger.Debug(Format('Processing PATCH request for path: %s', [requestPath]));
-      mtDelete: FLogger.Debug(Format('Processing DELETE request for path: %s', [requestPath]));
+      mtGet:
+        FLogger.Debug(Format('Processing GET request for path: %s', [requestPath]));
+      mtPost:
+        FLogger.Debug(Format('Processing POST request for path: %s', [requestPath]));
+      mtPut:
+        FLogger.Debug(Format('Processing PUT request for path: %s', [requestPath]));
+      mtPatch:
+        FLogger.Debug(Format('Processing PATCH request for path: %s', [requestPath]));
+      mtDelete:
+        FLogger.Debug(Format('Processing DELETE request for path: %s', [requestPath]));
     end;
 
     if not FMethodsDictionary.TryGetValue(routeKey, methodInfo) then
@@ -575,12 +608,12 @@ begin
       FLogger.Error('Method not found: ' + methodInfo.MethodName);
       res.Status(500).Send('Internal server error');
       Exit;
-    end;    // Prepare method parameters using RTTI and DI resolution
+    end; // Prepare method parameters using RTTI and DI resolution
     methodParams := ResolveMethodParameters(method, req, res);
 
     // Invoke method
-    FLogger.Debug(Format('Invoking method %s on controller %s',
-      [methodInfo.MethodName, methodInfo.ControllerClass.ClassName]));
+    FLogger.Debug(Format('Invoking method %s on controller %s', [methodInfo.MethodName,
+        methodInfo.ControllerClass.ClassName]));
 
     methodResult := method.Invoke(instance, methodParams);
 
@@ -610,52 +643,56 @@ begin
   end;
 end;
 
-function TNest4DApplication.ResolveMethodParameters(const AMethod: TRttiMethod; ARequest: THorseRequest; AResponse: THorseResponse): TArray<TValue>;
+function TNest4DApplication.ResolveMethodParameters(const AMethod: TRttiMethod; ARequest: THorseRequest;
+AResponse: THorseResponse): TArray<TValue>;
 var
-  parameters: TArray<TRttiParameter>;
-  paramValues: TArray<TValue>;
-  i: Integer;
-  methodParam: TRttiParameter;
-  paramType: TRttiType;
-  paramTypeInfo: PTypeInfo;
-  paramValue: TValue;
-  interfaceService: TObject;
-  jsonBody: TJSONValue;
-  attr: TCustomAttribute;
+  parameters                                : TArray<TRttiParameter>;
+  paramValues                               : TArray<TValue>;
+  i                                         : Integer;
+  methodParam                               : TRttiParameter;
+  paramType                                 : TRttiType;
+  paramTypeInfo                             : PTypeInfo;
+  paramValue                                : TValue;
+  interfaceService                          : TObject;
+  jsonBody                                  : TJSONValue;
+  attr                                      : TCustomAttribute;
   paramAttr, queryAttr, headerAttr, bodyAttr: TCustomAttribute;
-  paramName, queryName, headerName: String;
-  isParamResolved: Boolean;
-  paramDict: TDictionary<String, String>;
-  queryDict: TDictionary<String, String>;
-  headerDict: TDictionary<String, String>;
-  j: Integer;
+  paramName, queryName, headerName          : String;
+  isParamResolved                           : Boolean;
+  paramDict                                 : TDictionary<String, String>;
+  queryDict                                 : TDictionary<String, String>;
+  headerDict                                : TDictionary<String, String>;
+  j                                         : Integer;
 begin
   parameters := AMethod.GetParameters;
   SetLength(paramValues, Length(parameters));
 
   for i := 0 to High(parameters) do
   begin
-    methodParam := parameters[i];
-    paramType := methodParam.ParamType;
-    paramTypeInfo := paramType.Handle;
+    methodParam     := parameters[i];
+    paramType       := methodParam.paramType;
+    paramTypeInfo   := paramType.Handle;
     isParamResolved := False;
 
     // Look for parameter attributes
-    paramAttr := nil;
-    queryAttr := nil;
+    paramAttr  := nil;
+    queryAttr  := nil;
     headerAttr := nil;
-    bodyAttr := nil;
+    bodyAttr   := nil;
 
     for attr in methodParam.GetAttributes do
     begin
       if attr is Param then
         paramAttr := attr
-      else if attr is Query then
-        queryAttr := attr
-      else if attr is Header then
-        headerAttr := attr
-      else if attr is Body then
-        bodyAttr := attr;
+      else
+        if attr is Query then
+          queryAttr := attr
+        else
+          if attr is Header then
+            headerAttr := attr
+          else
+            if attr is Body then
+              bodyAttr := attr;
     end;
 
     FLogger.Debug(Format('Resolving parameter %s of type %s', [methodParam.Name, paramType.Name]));
@@ -670,330 +707,374 @@ begin
           FLogger.Debug(Format('Resolved body parameter %s as raw string', [methodParam.Name]));
           isParamResolved := True;
         end
-        else if paramType.QualifiedName = 'System.JSON.TJSONObject' then
-        begin
-          if ARequest.Body <> '' then
+        else
+          if paramType.QualifiedName = 'System.JSON.TJSONObject' then
           begin
-            jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
-            if jsonBody is TJSONObject then
+            if ARequest.Body <> '' then
             begin
-              paramValues[i] := TValue.From<TJSONObject>(jsonBody as TJSONObject);
-              FLogger.Debug(Format('Resolved body parameter %s as TJSONObject', [methodParam.Name]));
-              isParamResolved := True;
+              jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
+              if jsonBody is TJSONObject then
+              begin
+                paramValues[i] := TValue.From<TJSONObject>(jsonBody as TJSONObject);
+                FLogger.Debug(Format('Resolved body parameter %s as TJSONObject', [methodParam.Name]));
+                isParamResolved := True;
+              end;
             end;
           end;
-        end;
       end
 
       // Handle @Param attribute
-      else if paramAttr <> nil then
-      begin
-        // Check if we want all parameters or a specific one
-        if Param(paramAttr).AllParams then
+      else
+        if paramAttr <> nil then
         begin
-          // Return all route parameters as TDictionary<String, String>
-          if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
+          // Check if we want all parameters or a specific one
+          if Param(paramAttr).AllParams then
           begin
-            paramDict := TDictionary<String, String>.Create;            try
-              // Add all route parameters to dictionary
-              for j := 0 to ARequest.Params.Count - 1 do
-              begin
-                paramDict.Add(ARequest.Params.Dictionary.Keys.ToArray[j], ARequest.Params.Items[ARequest.Params.Dictionary.Keys.ToArray[j]]);
-              end;
-              paramValues[i] := TValue.From<TDictionary<String, String>>(paramDict);
-              FLogger.Debug(Format('Resolved all route parameters as TDictionary for %s', [methodParam.Name]));
-              isParamResolved := True;
-            except
-              paramDict.Free;
-              raise;
-            end;
-          end;
-        end
-        else
-        begin
-          // Get specific parameter
-          paramName := Param(paramAttr).Name;
-          if paramName = '' then
-            paramName := methodParam.Name; // Use parameter name if attribute name is empty
-
-          if ARequest.Params.Field(paramName).AsString <> '' then
-          begin
-            case paramType.TypeKind of
-              tkInteger:
+            // Return all route parameters as TDictionary<String, String>
+            if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
+            begin
+              paramDict := TDictionary<String, String>.Create;
+              try
+                // Add all route parameters to dictionary
+                for j := 0 to ARequest.Params.Count - 1 do
                 begin
-                  paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.Params.Field(paramName).AsString, 0));
-                  FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
-                  isParamResolved := True;
+                  paramDict.Add(ARequest.Params.Dictionary.Keys.ToArray[j],
+                    ARequest.Params.Items[ARequest.Params.Dictionary.Keys.ToArray[j]]);
                 end;
-              tkUString, tkString, tkLString, tkWString:
-                begin
-                  paramValues[i] := TValue.From<String>(ARequest.Params.Field(paramName).AsString);
-                  FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
-                  isParamResolved := True;
-                end;
-              tkFloat:
-                begin
-                  paramValues[i] := TValue.From<Double>(StrToFloatDef(ARequest.Params.Field(paramName).AsString, 0.0));
-                  FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
-                  isParamResolved := True;
-                end;
-            end;
-          end;
-        end;
-      end
-
-      // Handle @Query attribute
-      else if queryAttr <> nil then
-      begin        // Check if we want all query parameters or a specific one
-        if Query(queryAttr).AllParams then
-        begin
-          // Return all query parameters as TDictionary<String, String>
-          if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
-          begin
-            queryDict := TDictionary<String, String>.Create;
-            try              // Add all query parameters to dictionary
-              for j := 0 to ARequest.Query.Count - 1 do
-              begin
-                queryDict.Add(ARequest.Query.Dictionary.Keys.ToArray[j], ARequest.Query.Dictionary.Keys.ToArray[j]);
-              end;
-              paramValues[i] := TValue.From<TDictionary<String, String>>(queryDict);
-              FLogger.Debug(Format('Resolved all query parameters as TDictionary for %s', [methodParam.Name]));
-              isParamResolved := True;
-            except
-              queryDict.Free;
-              raise;
-            end;
-          end;
-        end
-        else
-        begin
-          // Get specific query parameter
-          queryName := Query(queryAttr).Name;
-          if queryName = '' then
-            queryName := methodParam.Name; // Use parameter name if attribute name is empty
-
-          if ARequest.Query.Field(queryName).AsString <> '' then
-          begin
-            case paramType.TypeKind of
-              tkInteger:
-                begin
-                  paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.Query.Field(queryName).AsString, 0));
-                  FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
-                  isParamResolved := True;
-                end;
-              tkUString, tkString, tkLString, tkWString:
-                begin
-                  paramValues[i] := TValue.From<String>(ARequest.Query.Field(queryName).AsString);
-                  FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
-                  isParamResolved := True;
-                end;
-              tkFloat:
-                begin
-                  paramValues[i] := TValue.From<Double>(StrToFloatDef(ARequest.Query.Field(queryName).AsString, 0.0));
-                  FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
-                  isParamResolved := True;
-                end;
-            end;
-          end;
-        end;
-      end
-
-      // Handle @Header attribute
-      else if headerAttr <> nil then
-      begin        // Check if we want all headers or a specific one
-        if Header(headerAttr).AllHeaders then
-        begin
-          // Return all headers as TDictionary<String, String>
-          if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
-          begin
-            headerDict := TDictionary<String, String>.Create;
-            try              // Add all headers to dictionary
-              for j := 0 to ARequest.Headers.Count - 1 do
-              begin
-                headerDict.Add(ARequest.Headers.Dictionary.Keys.ToArray[j], ARequest.Headers.Dictionary.Keys.ToArray[j]);
-              end;
-              paramValues[i] := TValue.From<TDictionary<String, String>>(headerDict);
-              FLogger.Debug(Format('Resolved all headers as TDictionary for %s', [methodParam.Name]));
-              isParamResolved := True;
-            except
-              headerDict.Free;
-              raise;
-            end;
-          end;
-        end
-        else
-        begin
-          // Get specific header
-          headerName := Header(headerAttr).Name;
-          if headerName = '' then
-            headerName := methodParam.Name; // Use parameter name if attribute name is empty
-
-          if ARequest.Headers[headerName] <> '' then
-          begin
-            case paramType.TypeKind of
-              tkUString, tkString, tkLString, tkWString:
-                begin
-                  paramValues[i] := TValue.From<String>(ARequest.Headers[headerName]);
-                  FLogger.Debug(Format('Resolved header %s from request header', [headerName]));
-                  isParamResolved := True;
-                end;
-            end;
-          end;
-        end;
-      end
-
-      // Handle special framework types without attributes
-      else if paramType.QualifiedName = 'Horse.THorseRequest' then
-      begin
-        paramValues[i] := TValue.From<THorseRequest>(ARequest);
-        FLogger.Debug('Injected THorseRequest parameter');
-        isParamResolved := True;
-      end
-      else if paramType.QualifiedName = 'Horse.THorseResponse' then
-      begin
-        paramValues[i] := TValue.From<THorseResponse>(AResponse);
-        FLogger.Debug('Injected THorseResponse parameter');
-        isParamResolved := True;
-      end      // Handle dependency injection for interfaces and classes
-      else if paramType.TypeKind = tkInterface then
-      begin
-        try
-          paramValues[i] := ResolveInterface(paramType);
-          if not paramValues[i].IsEmpty then
-          begin
-            FLogger.Debug(Format('Resolved interface parameter %s via DI', [paramType.Name]));
-            isParamResolved := True;
-          end          else
-          begin
-            FLogger.Warn(Format('Could not resolve interface parameter %s', [paramType.Name]));
-            isParamResolved := False;
-          end;
-        except
-          on E: Exception do
-            FLogger.Warn(Format('Could not resolve interface %s via DI: %s', [paramType.Name, E.Message]));
-        end;
-      end
-      else if paramType.TypeKind = tkClass then
-      begin
-        try
-          interfaceService := N4DInjector.Get(paramType.AsInstance.MetaclassType);
-          if interfaceService <> nil then
-          begin
-            paramValues[i] := TValue.From(interfaceService);
-            FLogger.Debug(Format('Resolved class parameter %s via DI', [paramType.Name]));
-            isParamResolved := True;
-          end;
-        except
-          on E: Exception do
-            FLogger.Debug(Format('Could not resolve class %s via DI: %s', [paramType.Name, E.Message]));
-        end;
-      end
-
-      // Fallback: try legacy parameter resolution (JSON body, form fields, route params)
-      else if not isParamResolved then
-      begin
-        // Try JSON body or form fields
-        if (ARequest.ContentFields.Count > 0) or (ARequest.Body <> '') then
-        begin
-          case paramType.TypeKind of
-            tkInteger:
-              begin
-                if ARequest.Body <> '' then
-                begin
-                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
-                  try                    if (jsonBody is TJSONObject) and (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
-                    begin
-                      paramValues[i] := TValue.From<Integer>(TJSONObject(jsonBody).GetValue<Integer>(methodParam.Name));
-                      FLogger.Debug(Format('Resolved integer parameter %s from JSON body', [methodParam.Name]));
-                      isParamResolved := True;
-                    end;
-                  finally
-                    if Assigned(jsonBody) then
-                      jsonBody.Free;
-                  end;
-                end;                if not isParamResolved and (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
-                begin
-                  paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.ContentFields.Field(methodParam.Name).AsString, 0));
-                  FLogger.Debug(Format('Resolved integer parameter %s from form field', [methodParam.Name]));
-                  isParamResolved := True;
-                end;
-              end;
-
-            tkUString, tkString, tkLString, tkWString:
-              begin
-                if ARequest.Body <> '' then
-                begin
-                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
-                  try                    if (jsonBody is TJSONObject) and (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
-                    begin
-                      paramValues[i] := TValue.From<String>(TJSONObject(jsonBody).GetValue<String>(methodParam.Name));
-                      FLogger.Debug(Format('Resolved string parameter %s from JSON body', [methodParam.Name]));
-                      isParamResolved := True;
-                    end;
-                  finally
-                    if Assigned(jsonBody) then
-                      jsonBody.Free;
-                  end;
-                end;                if not isParamResolved and (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
-                begin
-                  paramValues[i] := TValue.From<String>(ARequest.ContentFields.Field(methodParam.Name).AsString);
-                  FLogger.Debug(Format('Resolved string parameter %s from form field', [methodParam.Name]));
-                  isParamResolved := True;
-                end;
-              end;
-
-            tkFloat:
-              begin
-                if ARequest.Body <> '' then
-                begin
-                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
-                  try
-                    if (jsonBody is TJSONObject) and (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
-                    begin
-                      paramValues[i] := TValue.From<Double>(TJSONObject(jsonBody).GetValue<Double>(methodParam.Name));
-                      FLogger.Debug(Format('Resolved float parameter %s from JSON body', [methodParam.Name]));
-                      isParamResolved := True;
-                    end;
-                  finally
-                    if Assigned(jsonBody) then
-                      jsonBody.Free;
-                  end;
-                end;
-
-                if not isParamResolved and (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
-                begin
-                  paramValues[i] := TValue.From<Double>(StrToFloatDef(ARequest.ContentFields.Field(methodParam.Name).AsString, 0.0));
-                  FLogger.Debug(Format('Resolved float parameter %s from form field', [methodParam.Name]));
-                  isParamResolved := True;
-                end;
-              end;
-          end;
-        end;
-
-        // Try route parameters
-        if not isParamResolved and (ARequest.Params.Field(methodParam.Name).AsString <> '') then
-        begin
-          case paramType.TypeKind of
-            tkInteger:
-              begin
-                paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.Params.Field(methodParam.Name).AsString, 0));
-                FLogger.Debug(Format('Resolved integer parameter %s from route param', [methodParam.Name]));
+                paramValues[i] := TValue.From < TDictionary < String, String >> (paramDict);
+                FLogger.Debug(Format('Resolved all route parameters as TDictionary for %s', [methodParam.Name]));
                 isParamResolved := True;
+              except
+                paramDict.Free;
+                raise;
               end;
-            tkUString, tkString, tkLString, tkWString:
-              begin
-                paramValues[i] := TValue.From<String>(ARequest.Params.Field(methodParam.Name).AsString);
-                FLogger.Debug(Format('Resolved string parameter %s from route param', [methodParam.Name]));
-                isParamResolved := True;
+            end;
+          end
+          else
+          begin
+            // Get specific parameter
+            paramName := Param(paramAttr).Name;
+            if paramName = '' then
+              paramName := methodParam.Name; // Use parameter name if attribute name is empty
+
+            if ARequest.Params.Field(paramName).AsString <> '' then
+            begin
+              case paramType.TypeKind of
+                tkInteger:
+                  begin
+                    paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.Params.Field(paramName).AsString, 0));
+                    FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
+                    isParamResolved := True;
+                  end;
+                tkUString, tkString, tkLString, tkWString:
+                  begin
+                    paramValues[i] := TValue.From<String>(ARequest.Params.Field(paramName).AsString);
+                    FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
+                    isParamResolved := True;
+                  end;
+                tkFloat:
+                  begin
+                    paramValues[i] :=
+                      TValue.From<Double>(StrToFloatDef(ARequest.Params.Field(paramName).AsString, 0.0));
+                    FLogger.Debug(Format('Resolved param %s from route parameter', [paramName]));
+                    isParamResolved := True;
+                  end;
               end;
+            end;
           end;
-        end;
-      end;
+        end
+
+        // Handle @Query attribute
+        else
+          if queryAttr <> nil then
+          begin // Check if we want all query parameters or a specific one
+            if Query(queryAttr).AllParams then
+            begin
+              // Return all query parameters as TDictionary<String, String>
+              if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
+              begin
+                queryDict := TDictionary<String, String>.Create;
+                try // Add all query parameters to dictionary
+                  for j := 0 to ARequest.Query.Count - 1 do
+                  begin
+                    queryDict.Add(ARequest.Query.Dictionary.Keys.ToArray[j], ARequest.Query.Dictionary.Keys.ToArray[j]);
+                  end;
+                  paramValues[i] := TValue.From < TDictionary < String, String >> (queryDict);
+                  FLogger.Debug(Format('Resolved all query parameters as TDictionary for %s', [methodParam.Name]));
+                  isParamResolved := True;
+                except
+                  queryDict.Free;
+                  raise;
+                end;
+              end;
+            end
+            else
+            begin
+              // Get specific query parameter
+              queryName := Query(queryAttr).Name;
+              if queryName = '' then
+                queryName := methodParam.Name; // Use parameter name if attribute name is empty
+
+              if ARequest.Query.Field(queryName).AsString <> '' then
+              begin
+                case paramType.TypeKind of
+                  tkInteger:
+                    begin
+                      paramValues[i] := TValue.From<Integer>(StrToIntDef(ARequest.Query.Field(queryName).AsString, 0));
+                      FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
+                      isParamResolved := True;
+                    end;
+                  tkUString, tkString, tkLString, tkWString:
+                    begin
+                      paramValues[i] := TValue.From<String>(ARequest.Query.Field(queryName).AsString);
+                      FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
+                      isParamResolved := True;
+                    end;
+                  tkFloat:
+                    begin
+                      paramValues[i] :=
+                        TValue.From<Double>(StrToFloatDef(ARequest.Query.Field(queryName).AsString, 0.0));
+                      FLogger.Debug(Format('Resolved query %s from query parameter', [queryName]));
+                      isParamResolved := True;
+                    end;
+                end;
+              end;
+            end;
+          end
+
+          // Handle @Header attribute
+          else
+            if headerAttr <> nil then
+            begin // Check if we want all headers or a specific one
+              if Header(headerAttr).AllHeaders then
+              begin
+                // Return all headers as TDictionary<String, String>
+                if paramType.QualifiedName = 'System.Generics.Collections.TDictionary<System.string,System.string>' then
+                begin
+                  headerDict := TDictionary<String, String>.Create;
+                  try // Add all headers to dictionary
+                    for j := 0 to ARequest.Headers.Count - 1 do
+                    begin
+                      headerDict.Add(ARequest.Headers.Dictionary.Keys.ToArray[j],
+                        ARequest.Headers.Dictionary.Keys.ToArray[j]);
+                    end;
+                    paramValues[i] := TValue.From < TDictionary < String, String >> (headerDict);
+                    FLogger.Debug(Format('Resolved all headers as TDictionary for %s', [methodParam.Name]));
+                    isParamResolved := True;
+                  except
+                    headerDict.Free;
+                    raise;
+                  end;
+                end;
+              end
+              else
+              begin
+                // Get specific header
+                headerName := Header(headerAttr).Name;
+                if headerName = '' then
+                  headerName := methodParam.Name; // Use parameter name if attribute name is empty
+
+                if ARequest.Headers[headerName] <> '' then
+                begin
+                  case paramType.TypeKind of
+                    tkUString, tkString, tkLString, tkWString:
+                      begin
+                        paramValues[i] := TValue.From<String>(ARequest.Headers[headerName]);
+                        FLogger.Debug(Format('Resolved header %s from request header', [headerName]));
+                        isParamResolved := True;
+                      end;
+                  end;
+                end;
+              end;
+            end
+
+            // Handle special framework types without attributes
+            else
+              if paramType.QualifiedName = 'Horse.THorseRequest' then
+              begin
+                paramValues[i] := TValue.From<THorseRequest>(ARequest);
+                FLogger.Debug('Injected THorseRequest parameter');
+                isParamResolved := True;
+              end
+              else
+                if paramType.QualifiedName = 'Horse.THorseResponse' then
+                begin
+                  paramValues[i] := TValue.From<THorseResponse>(AResponse);
+                  FLogger.Debug('Injected THorseResponse parameter');
+                  isParamResolved := True;
+                end // Handle dependency injection for interfaces and classes
+                else
+                  if paramType.TypeKind = tkInterface then
+                  begin
+                    try
+                      paramValues[i] := ResolveInterface(paramType);
+                      if not paramValues[i].IsEmpty then
+                      begin
+                        FLogger.Debug(Format('Resolved interface parameter %s via DI', [paramType.Name]));
+                        isParamResolved := True;
+                      end
+                      else
+                      begin
+                        FLogger.Warn(Format('Could not resolve interface parameter %s', [paramType.Name]));
+                        isParamResolved := False;
+                      end;
+                    except
+                      on E: Exception do
+                        FLogger.Warn(Format('Could not resolve interface %s via DI: %s', [paramType.Name, E.Message]));
+                    end;
+                  end
+                  else
+                    if paramType.TypeKind = tkClass then
+                    begin
+                      try
+                        interfaceService := N4DInjector.Get(paramType.AsInstance.MetaclassType);
+                        if interfaceService <> nil then
+                        begin
+                          paramValues[i] := TValue.From(interfaceService);
+                          FLogger.Debug(Format('Resolved class parameter %s via DI', [paramType.Name]));
+                          isParamResolved := True;
+                        end;
+                      except
+                        on E: Exception do
+                          FLogger.Debug(Format('Could not resolve class %s via DI: %s', [paramType.Name, E.Message]));
+                      end;
+                    end
+
+                    // Fallback: try legacy parameter resolution (JSON body, form fields, route params)
+                    else
+                      if not isParamResolved then
+                      begin
+                        // Try JSON body or form fields
+                        if (ARequest.ContentFields.Count > 0) or (ARequest.Body <> '') then
+                        begin
+                          case paramType.TypeKind of
+                            tkInteger:
+                              begin
+                                if ARequest.Body <> '' then
+                                begin
+                                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
+                                  try
+                                    if (jsonBody is TJSONObject) and
+                                      (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
+                                    begin
+                                      paramValues[i] :=
+                                        TValue.From<Integer>(TJSONObject(jsonBody).GetValue<Integer>(methodParam.Name));
+                                      FLogger.Debug(Format('Resolved integer parameter %s from JSON body',
+                                        [methodParam.Name]));
+                                      isParamResolved := True;
+                                    end;
+                                  finally
+                                    if Assigned(jsonBody) then
+                                      jsonBody.Free;
+                                  end;
+                                end;
+                                if not isParamResolved and
+                                  (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
+                                begin
+                                  paramValues[i] :=
+                                    TValue.From<Integer>
+                                    (StrToIntDef(ARequest.ContentFields.Field(methodParam.Name).AsString, 0));
+                                  FLogger.Debug(Format('Resolved integer parameter %s from form field',
+                                    [methodParam.Name]));
+                                  isParamResolved := True;
+                                end;
+                              end;
+
+                            tkUString, tkString, tkLString, tkWString:
+                              begin
+                                if ARequest.Body <> '' then
+                                begin
+                                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
+                                  try
+                                    if (jsonBody is TJSONObject) and
+                                      (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
+                                    begin
+                                      paramValues[i] :=
+                                        TValue.From<String>(TJSONObject(jsonBody).GetValue<String>(methodParam.Name));
+                                      FLogger.Debug(Format('Resolved string parameter %s from JSON body',
+                                        [methodParam.Name]));
+                                      isParamResolved := True;
+                                    end;
+                                  finally
+                                    if Assigned(jsonBody) then
+                                      jsonBody.Free;
+                                  end;
+                                end;
+                                if not isParamResolved and
+                                  (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
+                                begin
+                                  paramValues[i] := TValue.From<String>(ARequest.ContentFields.Field(methodParam.Name)
+                                    .AsString);
+                                  FLogger.Debug(Format('Resolved string parameter %s from form field',
+                                    [methodParam.Name]));
+                                  isParamResolved := True;
+                                end;
+                              end;
+
+                            tkFloat:
+                              begin
+                                if ARequest.Body <> '' then
+                                begin
+                                  jsonBody := TJSONObject.ParseJSONValue(ARequest.Body);
+                                  try
+                                    if (jsonBody is TJSONObject) and
+                                      (TJSONObject(jsonBody).GetValue(methodParam.Name) <> nil) then
+                                    begin
+                                      paramValues[i] :=
+                                        TValue.From<Double>(TJSONObject(jsonBody).GetValue<Double>(methodParam.Name));
+                                      FLogger.Debug(Format('Resolved float parameter %s from JSON body',
+                                        [methodParam.Name]));
+                                      isParamResolved := True;
+                                    end;
+                                  finally
+                                    if Assigned(jsonBody) then
+                                      jsonBody.Free;
+                                  end;
+                                end;
+
+                                if not isParamResolved and
+                                  (ARequest.ContentFields.Field(methodParam.Name).AsString <> '') then
+                                begin
+                                  paramValues[i] :=
+                                    TValue.From<Double>
+                                    (StrToFloatDef(ARequest.ContentFields.Field(methodParam.Name).AsString, 0.0));
+                                  FLogger.Debug(Format('Resolved float parameter %s from form field',
+                                    [methodParam.Name]));
+                                  isParamResolved := True;
+                                end;
+                              end;
+                          end;
+                        end;
+
+                        // Try route parameters
+                        if not isParamResolved and (ARequest.Params.Field(methodParam.Name).AsString <> '') then
+                        begin
+                          case paramType.TypeKind of
+                            tkInteger:
+                              begin
+                                paramValues[i] :=
+                                  TValue.From<Integer>
+                                  (StrToIntDef(ARequest.Params.Field(methodParam.Name).AsString, 0));
+                                FLogger.Debug(Format('Resolved integer parameter %s from route param',
+                                  [methodParam.Name]));
+                                isParamResolved := True;
+                              end;
+                            tkUString, tkString, tkLString, tkWString:
+                              begin
+                                paramValues[i] := TValue.From<String>(ARequest.Params.Field(methodParam.Name).AsString);
+                                FLogger.Debug(Format('Resolved string parameter %s from route param',
+                                  [methodParam.Name]));
+                                isParamResolved := True;
+                              end;
+                          end;
+                        end;
+                      end;
 
       // Default value for unresolved parameters
       if not isParamResolved then
       begin
-        FLogger.Warn(Format('Could not resolve parameter %s of type %s, using default value', [methodParam.Name, paramType.Name]));
+        FLogger.Warn(Format('Could not resolve parameter %s of type %s, using default value',
+          [methodParam.Name, paramType.Name]));
         paramValues[i] := TValue.Empty;
       end;
 
@@ -1011,27 +1092,27 @@ end;
 
 procedure TNest4DApplication.RegisterControllerWithDependencies(AController: TClass);
 var
-  controllerType: TRttiType;
+  ControllerType   : TRttiType;
   constructorMethod: TRttiMethod;
-  constructorParam: TRttiParameter;
-  paramType: TRttiType;
-  serviceClass: TClass;
+  constructorParam : TRttiParameter;
+  paramType        : TRttiType;
+  serviceClass     : TClass;
 begin
   FLogger.Debug('Analyzing dependencies for controller: ' + AController.ClassName);
 
-  controllerType := FRttiContext.GetType(AController);
-  if controllerType = nil then
+  ControllerType := FRttiContext.GetType(AController);
+  if ControllerType = nil then
     Exit;
 
   // Find constructor
-  for constructorMethod in controllerType.GetMethods do
+  for constructorMethod in ControllerType.GetMethods do
   begin
     if constructorMethod.IsConstructor and (constructorMethod.Name = 'Create') then
     begin
       // Analyze constructor parameters
       for constructorParam in constructorMethod.GetParameters do
       begin
-        paramType := constructorParam.ParamType;
+        paramType := constructorParam.paramType;
 
         // Register class dependencies
         if paramType.TypeKind = tkClass then
@@ -1062,12 +1143,12 @@ end;
 
 function TNest4DApplication.ResolveConstructorParameters(const AClass: TClass): TConstructorParams;
 var
-  classType: TRttiType;
+  classType        : TRttiType;
   constructorMethod: TRttiMethod;
-  constructorParam: TRttiParameter;
-  paramType: TRttiType;
-  service: TObject;
-  i: Integer;
+  constructorParam : TRttiParameter;
+  paramType        : TRttiType;
+  service          : TObject;
+  i                : Integer;
 begin
   SetLength(Result, 0);
 
@@ -1086,7 +1167,7 @@ begin
       for i := 0 to High(constructorMethod.GetParameters) do
       begin
         constructorParam := constructorMethod.GetParameters[i];
-        paramType := constructorParam.ParamType;
+        paramType        := constructorParam.paramType;
 
         try
           if paramType.TypeKind = tkClass then
@@ -1101,20 +1182,22 @@ begin
             begin
               FLogger.Warn(Format('Could not resolve constructor parameter %s', [constructorParam.Name]));
               Result[i] := TValue.Empty;
-            end;          end
-          else if paramType.TypeKind = tkInterface then
-          begin
-            Result[i] := ResolveInterface(paramType);
-            if not Result[i].IsEmpty then
-              FLogger.Debug(Format('Resolved interface constructor parameter %s via DI', [constructorParam.Name]))
-            else
-              FLogger.Warn(Format('Could not resolve interface constructor parameter %s', [constructorParam.Name]));
+            end;
           end
           else
-          begin
-            FLogger.Warn(Format('Unsupported constructor parameter type: %s', [paramType.Name]));
-            Result[i] := TValue.Empty;
-          end;
+            if paramType.TypeKind = tkInterface then
+            begin
+              Result[i] := ResolveInterface(paramType);
+              if not Result[i].IsEmpty then
+                FLogger.Debug(Format('Resolved interface constructor parameter %s via DI', [constructorParam.Name]))
+              else
+                FLogger.Warn(Format('Could not resolve interface constructor parameter %s', [constructorParam.Name]));
+            end
+            else
+            begin
+              FLogger.Warn(Format('Unsupported constructor parameter type: %s', [paramType.Name]));
+              Result[i] := TValue.Empty;
+            end;
         except
           on E: Exception do
           begin
@@ -1130,7 +1213,7 @@ end;
 
 function TNest4DApplication.CreateInstanceWithDependencies(const AClass: TClass): TObject;
 var
-  classType: TRttiType;
+  classType        : TRttiType;
   constructorMethod: TRttiMethod;
   constructorParams: TArray<TValue>;
 begin
@@ -1191,18 +1274,6 @@ begin
         FLogger.Warn('Failed to resolve INest4DLogger: ' + E.Message);
     end;
   end;
-
-  // Adicione aqui outros casos específicos de interfaces conforme necessário
-  // Por exemplo:
-  // if AInterfaceType.QualifiedName = 'MyApp.IMyService' then
-  // begin
-  //   try
-  //     Result := TValue.From<IMyService>(N4DInjector.GetInterface<IMyService>);
-  //     Exit;
-  //   except
-  //     // handle error
-  //   end;
-  // end;
 
   FLogger.Warn(Format('Interface %s não está registrada para resolução automática', [AInterfaceType.Name]));
 end;

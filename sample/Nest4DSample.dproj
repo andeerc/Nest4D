@@ -96,6 +96,7 @@
         <DCCReference Include="..\src\Nest4D.Application.pas"/>
         <DCCReference Include="..\src\Nest4D.Attributes.pas"/>
         <DCCReference Include="..\src\Nest4D.Interfaces.pas"/>
+        <DCCReference Include="..\src\Nest4D.Logger.pas"/>
         <DCCReference Include="src\app.module.pas"/>
         <DCCReference Include="src\app.service.pas"/>
         <DCCReference Include="src\app.controller.pas"/>

@@ -5,6 +5,7 @@ program Nest4DSample;
 
 uses
   System.SysUtils,
+  Rtti,
   Nest4D.Application in '..\src\Nest4D.Application.pas',
   Nest4D.Attributes in '..\src\Nest4D.Attributes.pas',
   Nest4D.Interfaces in '..\src\Nest4D.Interfaces.pas',
@@ -20,8 +21,30 @@ uses
   Nest4D.Injector.service.abstract in '..\src\Nest4D.Injector.service.abstract.pas',
   Nest4D.Injector.service in '..\src\Nest4D.Injector.service.pas';
 
+var
+  loggerConfig: TLoggerConfig;
 begin
   try
+    // Configuração avançada do logger
+    loggerConfig                  := TLoggerConfig.Default;
+    loggerConfig.MinLevel         := llDebug;          // Mostra todos os logs em desenvolvimento
+    loggerConfig.Destination      := ldBoth;           // Saída no console E arquivo
+    loggerConfig.LogFileName      := 'nest4d_app.log'; // Nome do arquivo de log
+    loggerConfig.MaxFileSize      := 5 * 1024 * 1024;  // 5MB - rotação automática
+    loggerConfig.IncludeTimestamp := True;
+    loggerConfig.IncludeLevel     := True;
+    loggerConfig.AutoFlush        := True; // Flush imediato para debug
+
+    N4DInjector.SingletonInterface<INest4DLogger, TNest4DDefaultLogger>('', nil, nil,
+      function: TArray<TValue>
+      var
+        params: TValue;
+      begin
+        params := TValue.From(loggerConfig);
+        SetLength(Result, 1);
+        Result[0] := params
+      end);
+
     TNest4DApplication.NewApplication(TAppModule,
       procedure(app: TNest4DApplication)
       begin
